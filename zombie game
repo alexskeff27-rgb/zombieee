@@ -1,0 +1,132 @@
+import java.io.*;
+import java.util.*;
+
+public class CompleteGameSimulator {
+
+    // --- Player and progression stats ---
+    private static int playerXP = 0;
+    private static int passXP = 0;
+    private static int currentRegionIndex = 0;
+
+    private static final String PROGRESS_FILE = "PlayerProgress.txt";
+
+    // --- Region data ---
+    private static class Region {
+        String name;
+        int unlockXP;
+        int minKillXP;
+        int maxKillXP;
+        private double difficulty;
+        int passBonus;
+
+        Region(String name, int unlockXP, int minKillXP, int maxKillXP, double difficulty, int passBonus) {
+            this.name = name;
+            this.unlockXP = unlockXP;
+            this.minKillXP = minKillXP;
+            this.maxKillXP = maxKillXP;
+            this.setDifficulty(difficulty);
+            this.passBonus = passBonus;
+        }
+
+		@SuppressWarnings("unused")
+		public double getDifficulty() {
+			return difficulty;
+		}
+
+		public void setDifficulty(double difficulty) {
+			this.difficulty = difficulty;
+		}
+    }
+
+    private static final List<Region> REGIONS = Arrays.asList(
+            new Region("California", 0, 15, 20, 1.0, 0),
+            new Region("Nevada", 1000, 20, 25, 1.15, 500),
+            new Region("Arizona", 2000, 25, 30, 1.3, 500),
+            new Region("Texas", 3000, 30, 35, 1.45, 500),
+            new Region("New York", 4000, 35, 40, 1.6, 500),
+            new Region("Ontario", 5000, 40, 45, 1.75, 500),
+            new Region("Quebec", 6000, 45, 50, 1.9, 500),
+            new Region("British Columbia", 7000, 50, 55, 2.05, 500)
+    );
+
+    public static void main(String[] args) {
+        loadProgress();
+        runSimulation();
+        saveProgress();
+    }
+
+    private static void runSimulation() {
+        Random rand = new Random();
+        long startTime = System.currentTimeMillis();
+        long lastBonusTime = startTime;
+
+        while (currentRegionIndex < REGIONS.size()) {
+            Region region = REGIONS.get(currentRegionIndex);
+
+            // simulate zombie kill XP
+            int gain = region.minKillXP + rand.nextInt(region.maxKillXP - region.minKillXP + 1);
+            playerXP += gain;
+            passXP += gain / 10; // small pass XP from kills
+
+            // 10-minute survival bonus scaled to ~10 seconds
+            if (System.currentTimeMillis() - lastBonusTime > 10000) {
+                playerXP += 40;
+                lastBonusTime = System.currentTimeMillis();
+            }
+
+            // unlock next region if threshold reached
+            if (currentRegionIndex + 1 < REGIONS.size()) {
+                Region next = REGIONS.get(currentRegionIndex + 1);
+                if (playerXP >= next.unlockXP) {
+                    currentRegionIndex++;
+                    passXP += next.passBonus;
+                    System.out.println("🔓 Region unlocked: " + next.name);
+                    System.out.println("🎁 Zombie Pass +" + next.passBonus + " XP");
+                    drawMap();
+                }
+            }
+
+            // stop after final region unlock
+            if (currentRegionIndex == REGIONS.size() - 1 && playerXP >= REGIONS.get(currentRegionIndex).unlockXP + 5000)
+                break;
+        }
+
+        System.out.println("\n🎉 All regions unlocked!");
+        System.out.println("🏆 Final Player XP: " + playerXP);
+        System.out.println("🏅 Zombie Pass XP: " + passXP);
+    }
+
+    // --- Simple ASCII map ---
+    private static void drawMap() {
+        System.out.println("\n================ NORTH AMERICA MAP ================");
+        for (int i = 0; i < REGIONS.size(); i++) {
+            Region r = REGIONS.get(i);
+            String symbol;
+            if (i < currentRegionIndex) symbol = "🟩";
+            else if (i == currentRegionIndex) symbol = "⭐";
+            else symbol = "⬛";
+            System.out.printf("%-18s %s%n", "[" + r.name + "]", symbol);
+        }
+        System.out.println("==================================================\n");
+    }
+
+    private static void loadProgress() {
+        File f = new File(PROGRESS_FILE);
+        if (!f.exists()) return;
+        try (Scanner sc = new Scanner(f)) {
+            if (sc.hasNextInt()) playerXP = sc.nextInt();
+            if (sc.hasNextInt()) passXP = sc.nextInt();
+            if (sc.hasNextInt()) currentRegionIndex = sc.nextInt();
+        } catch (Exception ignored) {}
+    }
+
+    private static void saveProgress() {
+        try (PrintWriter pw = new PrintWriter(PROGRESS_FILE)) {
+            pw.println(playerXP);
+            pw.println(passXP);
+            pw.println(currentRegionIndex);
+        } catch (IOException e) {
+            System.out.println("Could not save progress: " + e.getMessage());
+        }
+    }
+}
